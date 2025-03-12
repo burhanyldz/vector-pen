@@ -136,6 +136,9 @@ class VectorPen {
     svg.style.height = "100%";
     svg.style.pointerEvents = "none";
     
+    const defs = document.createElementNS(svgNS, 'defs');
+    svg.appendChild(defs);
+
     // Create a group for all drawings
     const drawingGroup = document.createElementNS(svgNS, "g");
     drawingGroup.setAttribute("class", "drawing-group");
@@ -367,7 +370,7 @@ class VectorPen {
     this.isDrawing = false;
     this.points = [];
     this.activePointerId = null;
-    
+
     // Remove event listeners
     if (this.activeElement) {
       this.activeElement.removeEventListener('pointermove', this.handlePointerMove);
@@ -387,25 +390,25 @@ class VectorPen {
     
     const element = event.currentTarget;
     this.activeElement = element;
-    
+
     // Get SVG element
     const svg = element.querySelector('.vector-pen-layer');
     if (!svg) return;
-    
+
     // Store the active pointer ID to track only this pointer
     this.activePointerId = event.pointerId;
-    
+
     // Capture pointer to track movement outside element
     event.target.setPointerCapture(event.pointerId);
-    
+
     // Get element-relative coordinates
     const rect = element.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    
+
     this.isDrawing = true;
     this.points = [{x, y}];
-    
+
     // Add event listeners for move and up events
     element.addEventListener('pointermove', this.handlePointerMove);
     element.addEventListener('pointerup', this.handlePointerUp);
@@ -420,26 +423,26 @@ class VectorPen {
   handlePointerMove(event) {
     // Ignore events from non-active pointers
     if (event.pointerId !== this.activePointerId) return;
-    
+
     // If multiple touches are detected, cancel drawing
     if (this.touchCount > 1) {
       this.cancelDrawing();
       return;
     }
-    
+
     if (!this.isDrawing || !this.activeElement) return;
-    
+
     // Get element-relative coordinates
     const rect = this.activeElement.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    
+
     // Calculate distance from last point
     const lastPoint = this.points[this.points.length - 1];
     const dx = x - lastPoint.x;
     const dy = y - lastPoint.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     // Only add points with enough distance to avoid too many small segments
     if (distance >= this.options.minDistance) {
       this.points.push({x, y});
@@ -454,19 +457,19 @@ class VectorPen {
   handlePointerUp(event) {
     // Ignore events from non-active pointers
     if (event.pointerId !== this.activePointerId) return;
-    
+
     if (!this.isDrawing || !this.activeElement) return;
-    
+
     // Final update to the stroke
     if (this.points.length > 1) {
       this._finalizeStroke();
     }
-    
+
     // Clean up
     this.isDrawing = false;
     this.points = [];
     this.activePointerId = null;
-    
+
     // Remove event listeners
     this.activeElement.removeEventListener('pointermove', this.handlePointerMove);
     this.activeElement.removeEventListener('pointerup', this.handlePointerUp);
@@ -488,29 +491,52 @@ class VectorPen {
     const drawingGroup = this.drawingGroups[id];
     
     const svgNS = "http://www.w3.org/2000/svg";
-    let tempPath = svg.querySelector('.temp-path');
-    if (!tempPath) {
-      tempPath = document.createElementNS(svgNS, "path");
-      tempPath.setAttribute("class", "temp-path");
-      tempPath.setAttribute("fill", "none");
-      
-      if (this.activeTool === 'pen') {
+
+    // Pencil tool
+    if (this.activeTool === 'pen') {
+      let tempPath = svg.querySelector('.temp-path');
+      if (!tempPath) {
+        tempPath = document.createElementNS(svgNS, "path");
+        tempPath.setAttribute("class", "temp-path");
+        tempPath.setAttribute("fill", "none");
         tempPath.setAttribute("stroke", this.options.strokeColor);
         tempPath.setAttribute("stroke-width", this.options.strokeWidth);
-      } else if (this.activeTool === 'eraser') {
-        tempPath.setAttribute("stroke", "white");
-        tempPath.setAttribute("stroke-width", this.options.eraserWidth);
-        tempPath.setAttribute("stroke-opacity", "1");
-        tempPath.setAttribute("stroke-linecap", "round");
-        tempPath.setAttribute("stroke-linejoin", "round");
-        tempPath.setAttribute("style", "mix-blend-mode: destination-out");
+        drawingGroup.appendChild(tempPath);
       }
-      
-      drawingGroup.appendChild(tempPath);
+
+      const pathData = this._generatePathData(this.points);
+      tempPath.setAttribute("d", pathData);
     }
-    
-    const pathData = this._generatePathData(this.points);
-    tempPath.setAttribute("d", pathData);
+
+    // Eraser tool
+    if (this.activeTool === 'eraser') {
+      let tempEraserMask = svg.querySelector('#temp-eraser-mask');
+      if (!tempEraserMask) {
+        tempEraserMask = document.createElementNS(svgNS, 'mask');
+        tempEraserMask.setAttribute('id', 'temp-eraser-mask');
+        const rect = document.createElementNS(svgNS, 'rect');
+        rect.setAttribute('fill', 'white');
+        rect.setAttribute('width', '100%');
+        rect.setAttribute('height', '100%');
+        tempEraserMask.appendChild(rect);
+        const defs = svg.querySelector('defs');
+        if (defs) defs.appendChild(tempEraserMask);
+        drawingGroup.setAttribute('mask', 'url(#temp-eraser-mask)');
+      }
+
+      let tempPath = svg.querySelector('.temp-eraser-path');
+      if (!tempPath) {
+        tempPath = document.createElementNS(svgNS, 'path');
+        tempPath.setAttribute('class', 'temp-eraser-path');
+        tempPath.setAttribute('fill', 'none');
+        tempPath.setAttribute('stroke', 'black');
+        tempPath.setAttribute('stroke-width', this.options.eraserWidth);
+        tempEraserMask.appendChild(tempPath);
+      }
+
+      const pathData = this._generatePathData(this.points);
+      tempPath.setAttribute('d', pathData);
+    }
   }
   
   /**
@@ -522,33 +548,57 @@ class VectorPen {
     
     const svg = this.activeElement.querySelector('.vector-pen-layer');
     if (!svg) return;
-    
+
     const id = this.activeElement.id || `vector-pen-${this.elements.indexOf(this.activeElement) + 1}`;
     const drawingGroup = this.drawingGroups[id];
     
     const pathData = this._generatePathData(this.points);
     
     const svgNS = "http://www.w3.org/2000/svg";
+
+    // Pencil tool
     const path = document.createElementNS(svgNS, "path");
     path.setAttribute("fill", "none");
-    
-    if (this.activeTool === 'pen') {
-      path.setAttribute("stroke", this.options.strokeColor);
-      path.setAttribute("stroke-width", this.options.strokeWidth);
-      path.setAttribute("class", "vector-pen-stroke");
-    } else if (this.activeTool === 'eraser') {
-      path.setAttribute("stroke", "white");
-      path.setAttribute("stroke-width", this.options.eraserWidth);
-      path.setAttribute("stroke-opacity", "1");
-      path.setAttribute("stroke-linecap", "round");
-      path.setAttribute("stroke-linejoin", "round");
-      path.setAttribute("style", "mix-blend-mode: destination-out");
-      path.setAttribute("class", "vector-pen-eraser");
-    }
-    
+    path.setAttribute("stroke", this.options.strokeColor);
+    path.setAttribute("stroke-width", this.options.strokeWidth);
+    path.setAttribute("class", "vector-pen-stroke");
     path.setAttribute("d", pathData);
     drawingGroup.appendChild(path);
-    
+
+    // Eraser tool
+    if (this.activeTool === 'eraser') {
+      const tempMask = svg.querySelector('#temp-eraser-mask');
+      const tempPath = svg.querySelector('.temp-eraser-path');
+
+      const permanentMaskId = 'eraser-mask-' + Date.now();
+      const permMask = document.createElementNS(svgNS, 'mask');
+      permMask.setAttribute('id', permanentMaskId);
+      const bgRect = document.createElementNS(svgNS, 'rect');
+      bgRect.setAttribute('fill', 'white');
+      bgRect.setAttribute('width', '100%');
+      bgRect.setAttribute('height', '100%');
+      permMask.appendChild(bgRect);
+
+      if (tempPath) {
+        tempPath.setAttribute('class', '');
+        permMask.appendChild(tempPath);
+      }
+      const defs = svg.querySelector('defs');
+      if (defs) defs.appendChild(permMask);
+
+      // Wrap the existing drawingGroup with a new masked group so erasures remain
+      const newMaskedGroup = document.createElementNS(svgNS, 'g');
+      newMaskedGroup.setAttribute('mask', `url(#${permanentMaskId})`);
+      while (drawingGroup.firstChild) {
+        newMaskedGroup.appendChild(drawingGroup.firstChild);
+      }
+      drawingGroup.appendChild(newMaskedGroup);
+
+      // Clean up the temporary mask
+      if (tempMask) tempMask.remove();
+      drawingGroup.removeAttribute('mask');
+    }
+
     // Store the path in our collection
     this.paths[id].push({
       type: this.activeTool,
@@ -556,9 +606,11 @@ class VectorPen {
       points: [...this.points]
     });
     
-    // Remove temp path
+    // Remove temp paths
     const tempPath = svg.querySelector('.temp-path');
     if (tempPath) tempPath.remove();
+    const tempEraserPath = svg.querySelector('.temp-eraser-path');
+    if (tempEraserPath) tempEraserPath.remove();
   }
   
   /**
