@@ -14,9 +14,9 @@ body {
 /* Drawing area styles */
 .example-container {
     padding: 20px;
-    height: 100vh; /* Use viewport height instead of percentage */
+    height: 100vh;
     max-height: 100vh;
-    overflow: hidden; /* Prevent scrolling */
+    overflow: hidden;
     display: flex;
     flex-direction: column;
 }

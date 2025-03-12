@@ -1,15 +1,29 @@
 /**
- * Vektör Kalem demosu için uygulama kodu
+ * Application code for Vector Pen and Pinch Zoom demo
  */
 document.addEventListener('DOMContentLoaded', () => {
-  // VectorPen'i başlat
+  // Initialize PinchZoom first
+  const pinchZoom = new PinchZoom({
+    minZoom: 0.5,
+    maxZoom: 3.0,
+    speedFactor: 0.002,
+    animationDuration: 200,
+    disablePan: false,
+    enablePresentation: true
+  });
+  
+  // First attach PinchZoom to the drawing target
+  const drawingTarget = document.querySelector('.drawing-target');
+  pinchZoom.attach('.drawing-target');
+  
+  // Initialize VectorPen
   const vectorPen = new VectorPen({
     showToolbar: true,
-    toolbarPosition: 'top', // Can be: 'left', 'right', 'top', 'bottom', 'top-left', 'top-right', 'bottom-left', 'bottom-right'
+    toolbarPosition: 'top',
     toolbarContainer: document.body,
     showClearButtons: false
   });
   
-  // Tüm çizim hedefi elemanlarına ekle
+  // Then attach VectorPen to the drawing target
   vectorPen.attach('.drawing-target');
 });
