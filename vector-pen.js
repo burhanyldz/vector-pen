@@ -36,6 +36,8 @@ class VectorPen {
     if (this.options.showToolbar) {
       this.createToolbar();
     }
+  
+    this.touchHandlers = new WeakMap(); // Store touch handlers for cleanup
   }
 
   createToolbar() {
@@ -154,6 +156,20 @@ class VectorPen {
       element.appendChild(clearButton);
     }
     
+    // Prevent scrolling when drawing
+    const handleTouch = (e) => {
+      if (this.activeTool) {
+        e.preventDefault();
+      }
+    };
+
+    // Store the handler reference
+    this.touchHandlers.set(element, handleTouch);
+    
+    // Add touch event listeners with passive: false to allow preventDefault
+    element.addEventListener('touchstart', handleTouch, { passive: false });
+    element.addEventListener('touchmove', handleTouch, { passive: false });
+    
     element.appendChild(svg);
     
     // Store references
@@ -192,8 +208,16 @@ class VectorPen {
   _detachFromElement(element) {
     const index = this.elements.indexOf(element);
     if (index === -1) return;
+
+    // Remove event listeners using stored reference
+    const handleTouch = this.touchHandlers.get(element);
+    if (handleTouch) {
+      element.removeEventListener('touchstart', handleTouch);
+      element.removeEventListener('touchmove', handleTouch);
+      this.touchHandlers.delete(element);
+    }
     
-    // Remove SVG layer
+    // Remove SVG layer and clear button
     const svg = element.querySelector('.vector-pen-layer');
     const clearButton = element.querySelector('.clear-button');
     if (svg) element.removeChild(svg);
