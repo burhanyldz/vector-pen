@@ -23,6 +23,8 @@ class VectorPen {
     this.paths = {};
     this.observers = {};
     this.toolbar = null;
+    this.activePointerId = null; // Track the active pointer ID
+    this.touchCount = 0; // Track number of active touches
 
     // Add a group for drawings
     this.drawingGroups = {};
@@ -32,6 +34,9 @@ class VectorPen {
     this.handlePointerMove = this.handlePointerMove.bind(this);
     this.handlePointerUp = this.handlePointerUp.bind(this);
     this.handleResize = this.handleResize.bind(this);
+    this.handleTouchStart = this.handleTouchStart.bind(this);
+    this.handleTouchEnd = this.handleTouchEnd.bind(this);
+    this.handleTouchCancel = this.handleTouchCancel.bind(this);
 
     if (this.options.showToolbar) {
       this.createToolbar();
@@ -162,7 +167,7 @@ class VectorPen {
       element.appendChild(clearButton);
     }
     
-    // Prevent scrolling when drawing
+    // Prevent scrolling when drawing and track touch counts
     const handleTouch = (e) => {
       if (this.activeTool) {
         e.preventDefault();
@@ -175,6 +180,11 @@ class VectorPen {
     // Add touch event listeners with passive: false to allow preventDefault
     element.addEventListener('touchstart', handleTouch, { passive: false });
     element.addEventListener('touchmove', handleTouch, { passive: false });
+    
+    // Add touch tracking listeners
+    element.addEventListener('touchstart', this.handleTouchStart);
+    element.addEventListener('touchend', this.handleTouchEnd);
+    element.addEventListener('touchcancel', this.handleTouchCancel);
     
     element.appendChild(svg);
     
@@ -222,6 +232,11 @@ class VectorPen {
       element.removeEventListener('touchmove', handleTouch);
       this.touchHandlers.delete(element);
     }
+    
+    // Remove touch tracking event listeners
+    element.removeEventListener('touchstart', this.handleTouchStart);
+    element.removeEventListener('touchend', this.handleTouchEnd);
+    element.removeEventListener('touchcancel', this.handleTouchCancel);
     
     // Remove SVG layer and clear button
     const svg = element.querySelector('.vector-pen-layer');
@@ -303,16 +318,82 @@ class VectorPen {
   }
   
   /**
+   * Handle touch start events to detect multi-touch
+   * @private 
+   */
+  handleTouchStart(event) {
+    this.touchCount = event.touches.length;
+    
+    // If we detect more than one touch point, cancel any ongoing drawing
+    if (this.touchCount > 1 && this.isDrawing) {
+      this.cancelDrawing();
+    }
+  }
+  
+  /**
+   * Handle touch end events to update touch count
+   * @private
+   */
+  handleTouchEnd(event) {
+    this.touchCount = event.touches.length;
+  }
+  
+  /**
+   * Handle touch cancel events
+   * @private
+   */
+  handleTouchCancel(event) {
+    this.touchCount = event.touches.length;
+    if (this.isDrawing) {
+      this.cancelDrawing();
+    }
+  }
+  
+  /**
+   * Cancel the current drawing operation
+   * @private
+   */
+  cancelDrawing() {
+    if (!this.isDrawing || !this.activeElement) return;
+    
+    // Clean up the temporary path without finalizing it
+    const svg = this.activeElement.querySelector('.vector-pen-layer');
+    if (svg) {
+      const tempPath = svg.querySelector('.temp-path');
+      if (tempPath) tempPath.remove();
+    }
+    
+    // Reset drawing state
+    this.isDrawing = false;
+    this.points = [];
+    this.activePointerId = null;
+    
+    // Remove event listeners
+    if (this.activeElement) {
+      this.activeElement.removeEventListener('pointermove', this.handlePointerMove);
+      this.activeElement.removeEventListener('pointerup', this.handlePointerUp);
+      this.activeElement.removeEventListener('pointercancel', this.handlePointerUp);
+      this.activeElement.removeEventListener('pointerleave', this.handlePointerUp);
+    }
+  }
+  
+  /**
    * Handle pointer down event
    * @private
    */
   handlePointerDown(event) {
+    // If we already have multiple touch points, don't start drawing
+    if (this.touchCount > 1) return;
+    
     const element = event.currentTarget;
     this.activeElement = element;
     
     // Get SVG element
     const svg = element.querySelector('.vector-pen-layer');
     if (!svg) return;
+    
+    // Store the active pointer ID to track only this pointer
+    this.activePointerId = event.pointerId;
     
     // Capture pointer to track movement outside element
     event.target.setPointerCapture(event.pointerId);
@@ -337,6 +418,15 @@ class VectorPen {
    * @private
    */
   handlePointerMove(event) {
+    // Ignore events from non-active pointers
+    if (event.pointerId !== this.activePointerId) return;
+    
+    // If multiple touches are detected, cancel drawing
+    if (this.touchCount > 1) {
+      this.cancelDrawing();
+      return;
+    }
+    
     if (!this.isDrawing || !this.activeElement) return;
     
     // Get element-relative coordinates
@@ -362,6 +452,9 @@ class VectorPen {
    * @private
    */
   handlePointerUp(event) {
+    // Ignore events from non-active pointers
+    if (event.pointerId !== this.activePointerId) return;
+    
     if (!this.isDrawing || !this.activeElement) return;
     
     // Final update to the stroke
@@ -372,6 +465,7 @@ class VectorPen {
     // Clean up
     this.isDrawing = false;
     this.points = [];
+    this.activePointerId = null;
     
     // Remove event listeners
     this.activeElement.removeEventListener('pointermove', this.handlePointerMove);
