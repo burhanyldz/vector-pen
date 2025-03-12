@@ -69,6 +69,9 @@ class PinchZoom {
     element.classList.add('pinch-zoom-container');
     children.forEach(child => {
       child.classList.add('pinch-zoom-element');
+      child.querySelectorAll('svg').forEach(svg => {
+        svg.classList.add('pinch-zoom-element');
+      });
     });
     
     // Initialize element state
