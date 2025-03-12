@@ -8,7 +8,9 @@ class VectorPen {
       strokeColor: options.strokeColor || '#000000',
       eraserWidth: options.eraserWidth || 40,
       minDistance: options.minDistance || 2,
-      showToolbar: options.showToolbar !== false, // Default to true
+      showToolbar: options.showToolbar !== false,
+      verticalToolbar: options.verticalToolbar !== false,
+      showClearButtons: options.showClearButtons !== false, // Default to true
       toolbarContainer: options.toolbarContainer || document.body,
       ...options
     };
@@ -39,6 +41,10 @@ class VectorPen {
   createToolbar() {
     const toolbar = document.createElement('div');
     toolbar.className = 'toolbar';
+    
+    if (this.options.verticalToolbar) {
+      toolbar.classList.add('toolbar-vertical');
+    }
     
     const penTool = document.createElement('button');
     penTool.id = 'pen-tool';
@@ -128,6 +134,26 @@ class VectorPen {
       element.style.position = 'relative';
     }
     
+    // Add clear button for this drawing area if enabled
+    if (this.options.showClearButtons) {
+      const clearButton = document.createElement('button');
+      clearButton.className = 'clear-button';
+      clearButton.textContent = 'Temizle';
+      clearButton.style.zIndex = '50';
+      
+      clearButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasToolActive = this.activeTool;
+        this.deactivateTool();
+        this.clear(element);
+        if (wasToolActive) {
+          this.activateTool(wasToolActive);
+        }
+      });
+      
+      element.appendChild(clearButton);
+    }
+    
     element.appendChild(svg);
     
     // Store references
@@ -169,7 +195,9 @@ class VectorPen {
     
     // Remove SVG layer
     const svg = element.querySelector('.vector-pen-layer');
+    const clearButton = element.querySelector('.clear-button');
     if (svg) element.removeChild(svg);
+    if (clearButton) element.removeChild(clearButton);
     
     // Disconnect resize observer
     const id = element.id || `vector-pen-${index + 1}`;
