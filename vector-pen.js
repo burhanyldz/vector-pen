@@ -9,7 +9,7 @@ class VectorPen {
       eraserWidth: options.eraserWidth || 40,
       minDistance: options.minDistance || 2,
       showToolbar: options.showToolbar !== false,
-      verticalToolbar: options.verticalToolbar !== false,
+      toolbarPosition: options.toolbarPosition || 'left', // New option for toolbar position
       showClearButtons: options.showClearButtons !== false, // Default to true
       toolbarContainer: options.toolbarContainer || document.body,
       ...options
@@ -44,7 +44,13 @@ class VectorPen {
     const toolbar = document.createElement('div');
     toolbar.className = 'toolbar';
     
-    if (this.options.verticalToolbar) {
+    // Set toolbar position class
+    const position = this.options.toolbarPosition.toLowerCase();
+    toolbar.classList.add(`toolbar-${position}`);
+    
+    // Determine if the toolbar should be vertical based on position
+    const isVertical = position.includes('left') || position.includes('right');
+    if (isVertical) {
       toolbar.classList.add('toolbar-vertical');
     }
     

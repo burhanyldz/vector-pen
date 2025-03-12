@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // VectorPen'i başlat
   const vectorPen = new VectorPen({
     showToolbar: true,
-    verticalToolbar: true,
+    toolbarPosition: 'top', // Can be: 'left', 'right', 'top', 'bottom', 'top-left', 'top-right', 'bottom-left', 'bottom-right'
     toolbarContainer: document.body
   });
   
