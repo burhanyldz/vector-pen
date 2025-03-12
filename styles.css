@@ -126,26 +126,6 @@ body {
     }
 }
 
-.example-instructions {
-    background-color: #f9f9f9;
-    padding: 20px;
-    border-radius: 8px;
-    border-left: 4px solid #3050ff;
-}
-
-.example-instructions ol {
-    margin-left: 20px;
-    line-height: 1.6;
-}
-
-.example-instructions li {
-    margin-bottom: 10px;
-}
-
-.example-instructions li:last-child {
-    margin-bottom: 0;
-}
-
 .drawing-target {
     background-color: white;
     border-radius: 8px;
@@ -233,46 +213,4 @@ body {
 
 .clear-button:active {
     background-color: #d0d0d0;
-}
-
-/* Onay diyalogu için Tümünü Temizle */
-.confirm-dialog {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
-    z-index: 2000;
-    width: 300px;
-    max-width: 90%;
-    text-align: center;
-}
-
-.confirm-dialog p {
-    margin-bottom: 20px;
-}
-
-.confirm-dialog-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-}
-
-.confirm-dialog-buttons button {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.confirm-yes {
-    background-color: #ff4040;
-    color: white;
-}
-
-.confirm-no {
-    background-color: #f0f0f0;
 }
