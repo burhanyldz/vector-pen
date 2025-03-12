@@ -6,24 +6,82 @@ class VectorPen {
     this.options = {
       strokeWidth: options.strokeWidth || 2,
       strokeColor: options.strokeColor || '#000000',
-      eraserWidth: options.eraserWidth || 40, // 20 times wider than pen by default
+      eraserWidth: options.eraserWidth || 40,
       minDistance: options.minDistance || 2,
+      showToolbar: options.showToolbar !== false, // Default to true
+      toolbarContainer: options.toolbarContainer || document.body,
       ...options
     };
     
-    this.elements = []; // Elements with attached drawing layers
+    this.elements = [];
     this.activeElement = null;
     this.isDrawing = false;
-    this.activeTool = null; // 'pen' or 'eraser'
-    this.points = []; // Current stroke points
-    this.paths = {}; // Store paths for each element
-    this.observers = {}; // Resize observers for elements
-    
-    // Bind event handlers to maintain 'this' context
+    this.activeTool = null;
+    this.points = [];
+    this.paths = {};
+    this.observers = {};
+    this.toolbar = null;
+
+    // Add a group for drawings
+    this.drawingGroups = {};
+
+    // Bind event handlers
     this.handlePointerDown = this.handlePointerDown.bind(this);
     this.handlePointerMove = this.handlePointerMove.bind(this);
     this.handlePointerUp = this.handlePointerUp.bind(this);
     this.handleResize = this.handleResize.bind(this);
+
+    if (this.options.showToolbar) {
+      this.createToolbar();
+    }
+  }
+
+  createToolbar() {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'toolbar';
+    
+    const penTool = document.createElement('button');
+    penTool.id = 'pen-tool';
+    penTool.className = 'tool-button';
+    penTool.innerHTML = `
+      <svg viewBox="0 0 24 24" width="24" height="24">
+        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path>
+      </svg>
+    `;
+    
+    const eraserTool = document.createElement('button');
+    eraserTool.id = 'eraser-tool';
+    eraserTool.className = 'tool-button';
+    eraserTool.innerHTML = `
+      <svg viewBox="0 0 24 24" width="24" height="24">
+        <path d="M15.14 3c-.51 0-1.02.2-1.41.59L2.59 14.73c-.78.77-.78 2.04 0 2.83l4.24 4.24c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l11.14-11.13c.78-.78.78-2.05 0-2.83l-4.24-4.24c-.39-.39-.9-.59-1.41-.59zM6.24 18.39l-2.12-2.12 7.78-7.78 2.12 2.12-7.78 7.78z"></path>
+      </svg>
+    `;
+    
+    const clearAll = document.createElement('button');
+    clearAll.id = 'clear-all';
+    clearAll.className = 'tool-button';
+    clearAll.innerHTML = `
+      <svg viewBox="0 0 24 24" width="24" height="24">
+        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path>
+      </svg>
+    `;
+    
+    // Add click handlers
+    penTool.addEventListener('click', () => this.activateTool('pen'));
+    eraserTool.addEventListener('click', () => this.activateTool('eraser'));
+    clearAll.addEventListener('click', () => this.clearAll());
+    
+    toolbar.appendChild(penTool);
+    toolbar.appendChild(eraserTool);
+    toolbar.appendChild(clearAll);
+    
+    this.options.toolbarContainer.appendChild(toolbar);
+    this.toolbar = toolbar;
+  }
+  
+  clearAll() {
+    this.elements.forEach(element => this.clear(element));
   }
   
   /**
@@ -41,7 +99,7 @@ class VectorPen {
     this._attachToElement(element);
     return this;
   }
-  
+
   /**
    * Private method to attach to a single element
    * @private
@@ -49,7 +107,6 @@ class VectorPen {
   _attachToElement(element) {
     if (this.elements.includes(element)) return;
     
-    // Create SVG layer
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("class", "vector-pen-layer");
@@ -60,6 +117,11 @@ class VectorPen {
     svg.style.height = "100%";
     svg.style.pointerEvents = "none";
     
+    // Create a group for all drawings
+    const drawingGroup = document.createElementNS(svgNS, "g");
+    drawingGroup.setAttribute("class", "drawing-group");
+    svg.appendChild(drawingGroup);
+    
     // Make sure element has position
     const position = window.getComputedStyle(element).position;
     if (position === 'static') {
@@ -68,16 +130,17 @@ class VectorPen {
     
     element.appendChild(svg);
     
-    // Store reference to the element and its SVG layer
+    // Store references
     this.elements.push(element);
-    this.paths[element.id || `vector-pen-${this.elements.length}`] = [];
+    const id = element.id || `vector-pen-${this.elements.length}`;
+    this.paths[id] = [];
+    this.drawingGroups[id] = drawingGroup;
     
     // Set up resize observer
     const resizeObserver = new ResizeObserver(this.handleResize);
     resizeObserver.observe(element);
-    this.observers[element.id || `vector-pen-${this.elements.length}`] = resizeObserver;
+    this.observers[id] = resizeObserver;
     
-    // Optimize SVG size on initial attach
     this._updateSVGSize(element, svg);
   }
   
@@ -118,6 +181,7 @@ class VectorPen {
     // Remove from storage
     this.elements.splice(index, 1);
     delete this.paths[id];
+    delete this.drawingGroups[id];
   }
   
   /**
@@ -132,6 +196,15 @@ class VectorPen {
     
     this.deactivateTool();
     this.activeTool = tool;
+    
+    // Update toolbar button states
+    if (this.toolbar) {
+      const penButton = this.toolbar.querySelector('#pen-tool');
+      const eraserButton = this.toolbar.querySelector('#eraser-tool');
+      
+      penButton.classList.toggle('active', tool === 'pen');
+      eraserButton.classList.toggle('active', tool === 'eraser');
+    }
     
     // Add event listeners to all elements
     this.elements.forEach(element => {
@@ -149,6 +222,15 @@ class VectorPen {
    */
   deactivateTool() {
     if (!this.activeTool) return this;
+    
+    // Remove active states from toolbar buttons
+    if (this.toolbar) {
+      const penButton = this.toolbar.querySelector('#pen-tool');
+      const eraserButton = this.toolbar.querySelector('#eraser-tool');
+      
+      penButton.classList.remove('active');
+      eraserButton.classList.remove('active');
+    }
     
     // Remove event listeners from all elements
     this.elements.forEach(element => {
@@ -250,7 +332,9 @@ class VectorPen {
     const svg = this.activeElement.querySelector('.vector-pen-layer');
     if (!svg) return;
     
-    // Find or create the temporary path element
+    const id = this.activeElement.id || `vector-pen-${this.elements.indexOf(this.activeElement) + 1}`;
+    const drawingGroup = this.drawingGroups[id];
+    
     const svgNS = "http://www.w3.org/2000/svg";
     let tempPath = svg.querySelector('.temp-path');
     if (!tempPath) {
@@ -270,10 +354,9 @@ class VectorPen {
         tempPath.setAttribute("style", "mix-blend-mode: destination-out");
       }
       
-      svg.appendChild(tempPath);
+      drawingGroup.appendChild(tempPath);
     }
     
-    // Generate path data
     const pathData = this._generatePathData(this.points);
     tempPath.setAttribute("d", pathData);
   }
@@ -288,10 +371,11 @@ class VectorPen {
     const svg = this.activeElement.querySelector('.vector-pen-layer');
     if (!svg) return;
     
-    // Generate path data
+    const id = this.activeElement.id || `vector-pen-${this.elements.indexOf(this.activeElement) + 1}`;
+    const drawingGroup = this.drawingGroups[id];
+    
     const pathData = this._generatePathData(this.points);
     
-    // Create final path
     const svgNS = "http://www.w3.org/2000/svg";
     const path = document.createElementNS(svgNS, "path");
     path.setAttribute("fill", "none");
@@ -311,10 +395,9 @@ class VectorPen {
     }
     
     path.setAttribute("d", pathData);
-    svg.appendChild(path);
+    drawingGroup.appendChild(path);
     
     // Store the path in our collection
-    const id = this.activeElement.id || `vector-pen-${this.elements.indexOf(this.activeElement) + 1}`;
     this.paths[id].push({
       type: this.activeTool,
       pathData,
@@ -323,7 +406,7 @@ class VectorPen {
     
     // Remove temp path
     const tempPath = svg.querySelector('.temp-path');
-    if (tempPath) svg.removeChild(tempPath);
+    if (tempPath) tempPath.remove();
   }
   
   /**
@@ -387,7 +470,7 @@ class VectorPen {
     this._clearElement(element);
     return this;
   }
-  
+
   /**
    * Clear drawings from a single element
    * @private
@@ -396,13 +479,15 @@ class VectorPen {
     const svg = element.querySelector('.vector-pen-layer');
     if (!svg) return;
     
-    // Remove all paths, more reliable way to clear the SVG content
-    while (svg.lastChild) {
-      svg.removeChild(svg.lastChild);
+    const id = element.id || `vector-pen-${this.elements.indexOf(element) + 1}`;
+    const drawingGroup = this.drawingGroups[id];
+    
+    // Clear all paths in the drawing group
+    while (drawingGroup.lastChild) {
+      drawingGroup.removeChild(drawingGroup.lastChild);
     }
     
     // Clear stored paths
-    const id = element.id || `vector-pen-${this.elements.indexOf(element) + 1}`;
     if (this.paths[id]) {
       this.paths[id] = [];
     }
@@ -416,7 +501,7 @@ class VectorPen {
     this.options.strokeColor = color;
     return this;
   }
-  
+
   /**
    * Set the stroke width for the pen tool
    * @param {number} width - Width in pixels
